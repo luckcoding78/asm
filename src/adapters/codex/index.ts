@@ -7,8 +7,11 @@
  */
 
 import { existsSync, mkdirSync, writeFileSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, dirname } from "node:path";
 import { homedir, platform } from "node:os";
+import { fileURLToPath } from "node:url";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 export class CodexAdapter {
   private home = homedir();
@@ -19,29 +22,22 @@ export class CodexAdapter {
     mkdirSync(this.hookDir, { recursive: true });
 
     const isWindows = platform() === "win32";
-    const daemonPid = join(this.home, ".asm", "daemon.pid").replace(/\\/g, "/");
+    const asmDir = join(this.home, ".asm");
+    const ensureDaemon = join(asmDir, "ensure-daemon.js").replace(/\\/g, "/");
+
+    // 生成 ensure-daemon.js（如果还没有）
+    if (!existsSync(ensureDaemon)) {
+      this.generateEnsureDaemon(ensureDaemon);
+    }
 
     if (isWindows) {
-      // PowerShell hook script — 使用绝对路径避免环境变量展开问题
+      // PowerShell hook script
       const eventsLog = join(this.home, ".asm", "events.log").replace(/\\/g, "/");
       const psScript = `# ASM Hook Handler for Codex CLI (Windows)
 param([string]$Action, [string]$Extra = "")
 
-# ── 自动启动 daemon ──
-$pidFile = "${daemonPid}"
-$daemonRunning = $false
-if (Test-Path $pidFile) {
-    $pid = Get-Content $pidFile -ErrorAction SilentlyContinue
-    if ($pid) {
-        try {
-            $null = Get-Process -Id ([int]$pid) -ErrorAction Stop
-            $daemonRunning = $true
-        } catch {}
-    }
-}
-if (-not $daemonRunning) {
-    Start-Process -FilePath "npx" -ArgumentList "@aspect-spy/asm", "daemon", "--start" -WindowStyle Hidden -ErrorAction SilentlyContinue
-}
+# ── 自动启动 daemon（静默）──
+node "${ensureDaemon}"
 
 $input_json = $input | Out-String
 $timestamp = (Get-Date -Format "o")
@@ -65,18 +61,8 @@ set -euo pipefail
 ACTION="\${1:-unknown}"
 EXTRA="\${2:-}"
 
-# ── 自动启动 daemon ──
-PID_FILE="$HOME/.asm/daemon.pid"
-DAEMON_RUNNING=false
-if [ -f "$PID_FILE" ]; then
-    PID=$(cat "$PID_FILE" 2>/dev/null || echo "")
-    if [ -n "$PID" ] && kill -0 "$PID" 2>/dev/null; then
-        DAEMON_RUNNING=true
-    fi
-fi
-if [ "$DAEMON_RUNNING" = false ]; then
-    (npx @aspect-spy/asm daemon --start >/dev/null 2>&1 &) || true
-fi
+# ── 自动启动 daemon（静默）──
+node "${ensureDaemon}" 2>/dev/null &
 
 INPUT_JSON=$(cat)
 TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
@@ -126,5 +112,35 @@ echo "{\\"eventId\\":\\"$EVENT_ID\\",\\"agent\\":\\"codex\\",\\"timestamp\\":\\"
       return `powershell -NoProfile -ExecutionPolicy Bypass -File "${hookScript}" ${action}`;
     }
     return `"${join(this.home, ".asm", "hooks", "codex", "asm-hook.sh")}" ${action}`;
+  }
+
+  private generateEnsureDaemon(scriptPath: string): void {
+    const asmEntry = join(__dirname, "..", "..", "cli", "index.js").replace(/\\/g, "/");
+
+    const script = `// ASM ensure-daemon — 静默检查并启动 daemon
+const { readFileSync, existsSync } = require("fs");
+const { spawn } = require("child_process");
+const { join } = require("path");
+
+const home = process.env.HOME || process.env.USERPROFILE;
+const pidFile = join(home, ".asm", "daemon.pid");
+
+if (existsSync(pidFile)) {
+  try {
+    const pid = parseInt(readFileSync(pidFile, "utf-8").trim(), 10);
+    process.kill(pid, 0);
+    process.exit(0);
+  } catch {}
+}
+
+const child = spawn(process.execPath, ["${asmEntry}", "daemon", "--start"], {
+  detached: true,
+  stdio: "ignore",
+  windowsHide: true,
+});
+child.unref();
+process.exit(0);
+`;
+    writeFileSync(scriptPath, script, "utf-8");
   }
 }

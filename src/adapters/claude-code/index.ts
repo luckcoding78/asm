@@ -59,31 +59,21 @@ export class ClaudeCodeAdapter {
 
     const isWindows = platform() === "win32";
     const home = homedir();
-    // 用正斜杠的绝对路径（bash/PowerShell 都能识别）
-    const hookPs1 = join(home, ".asm", "hooks", "claude-code", "asm-hook.ps1").replace(/\\/g, "/");
-    const eventsLog = join(home, ".asm", "events.log").replace(/\\/g, "/");
-    const daemonPid = join(home, ".asm", "daemon.pid").replace(/\\/g, "/");
+    const asmDir = join(home, ".asm");
+    const hookPs1 = join(asmDir, "hooks", "claude-code", "asm-hook.ps1").replace(/\\/g, "/");
+    const eventsLog = join(asmDir, "events.log").replace(/\\/g, "/");
+    const daemonPid = join(asmDir, "daemon.pid").replace(/\\/g, "/");
+    const ensureDaemon = join(asmDir, "ensure-daemon.js").replace(/\\/g, "/");
+
+    // 生成 ensure-daemon.js 启动器（用 node 直接启动，避免 npx 弹窗）
+    this.generateEnsureDaemon(ensureDaemon);
 
     if (isWindows) {
-      // PowerShell 版本（用绝对路径，避免 %USERPROFILE% 展开问题）
       const psScript = `# ASM Hook Handler for Claude Code (Windows)
 param([string]$Action, [string]$Extra = "")
 
-# ── 自动启动 daemon ──
-$pidFile = "${daemonPid}"
-$daemonRunning = $false
-if (Test-Path $pidFile) {
-    $pid = Get-Content $pidFile -ErrorAction SilentlyContinue
-    if ($pid) {
-        try {
-            $null = Get-Process -Id ([int]$pid) -ErrorAction Stop
-            $daemonRunning = $true
-        } catch {}
-    }
-}
-if (-not $daemonRunning) {
-    Start-Process -FilePath "npx" -ArgumentList "@aspect-spy/asm", "daemon", "--start" -WindowStyle Hidden -ErrorAction SilentlyContinue
-}
+# ── 自动启动 daemon（静默，无弹窗）──
+node "${ensureDaemon}"
 
 $input_json = $input | Out-String
 $timestamp = (Get-Date -Format "o")
@@ -115,27 +105,17 @@ set -euo pipefail
 ACTION="\${1:-unknown}"
 EXTRA="\${2:-}"
 
-# ── 自动启动 daemon ──
-PID_FILE="$HOME/.asm/daemon.pid"
-DAEMON_RUNNING=false
-if [ -f "$PID_FILE" ]; then
-    PID=$(cat "$PID_FILE" 2>/dev/null || echo "")
-    if [ -n "$PID" ] && kill -0 "$PID" 2>/dev/null; then
-        DAEMON_RUNNING=true
-    fi
-fi
-if [ "$DAEMON_RUNNING" = false ]; then
-    (npx @aspect-spy/asm daemon --start >/dev/null 2>&1 &) || true
-fi
+# ── 自动启动 daemon（静默）──
+node "${ensureDaemon}" 2>/dev/null &
 
 # 读取 stdin
 INPUT_JSON=$(cat)
 
-# 生成事件（macOS 兼容：不依赖 %3N 或 xxd）
+# 生成事件（macOS 兼容）
 TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
 EVENT_ID="$(date +%s)-$(head -c 6 /dev/urandom | od -An -tx1 | tr -d ' \\n' | head -c 12)"
 
-# 写入事件日志（JSON Lines 格式）
+# 写入事件日志
 echo "{\\"eventId\\":\\"$EVENT_ID\\",\\"agent\\":\\"claude-code\\",\\"timestamp\\":\\"$TIMESTAMP\\",\\"hookAction\\":\\"$ACTION\\",\\"extra\\":\\"$EXTRA\\",\\"rawData\\":$INPUT_JSON}" >> "$HOME/.asm/events.log"
 `;
       writeFileSync(join(hookDir, "asm-hook.sh"), shScript, "utf-8");
@@ -145,6 +125,44 @@ echo "{\\"eventId\\":\\"$EVENT_ID\\",\\"agent\\":\\"claude-code\\",\\"timestamp\
         execSync(`chmod +x "${join(hookDir, "asm-hook.sh")}"`, { stdio: "ignore" });
       } catch { /* 忽略权限错误 */ }
     }
+  }
+
+  // ── 生成 ensure-daemon.js 启动器 ──
+  // 用 node 直接运行，检查 daemon 是否运行，没有则静默启动
+  private generateEnsureDaemon(scriptPath: string): void {
+    // 找到已安装的 asm CLI 入口文件
+    const asmEntry = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "cli", "index.js").replace(/\\/g, "/");
+
+    const script = `// ASM ensure-daemon — 静默检查并启动 daemon
+// 由 hook 脚本调用，不弹窗，不阻塞
+const { readFileSync, existsSync } = require("fs");
+const { spawn } = require("child_process");
+const { join } = require("path");
+
+const home = process.env.HOME || process.env.USERPROFILE;
+const pidFile = join(home, ".asm", "daemon.pid");
+
+// 检查 daemon 是否已在运行
+if (existsSync(pidFile)) {
+  try {
+    const pid = parseInt(readFileSync(pidFile, "utf-8").trim(), 10);
+    process.kill(pid, 0); // 发送信号 0 检查进程存在
+    process.exit(0);      // daemon 在运行，直接退出
+  } catch {
+    // daemon 不存在，继续启动
+  }
+}
+
+// 静默启动 daemon（detached + windowsHide，无弹窗）
+const child = spawn(process.execPath, ["${asmEntry}", "daemon", "--start"], {
+  detached: true,
+  stdio: "ignore",
+  windowsHide: true,
+});
+child.unref();
+process.exit(0);
+`;
+    writeFileSync(scriptPath, script, "utf-8");
   }
 
   // ── 注入 Hooks 配置 ──

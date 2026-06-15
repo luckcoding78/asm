@@ -44,7 +44,7 @@ export async function daemonCommand(opts: { start?: boolean; stop?: boolean; lan
   writeFileSync(PID_FILE, String(process.pid), "utf-8");
 
   // 启动 LAN 服务
-  const lanPort = opts.lanPort || 19527;
+  const lanPort = opts.lanPort || 39527;
   const lanHost = opts.lanHost;  // undefined → 默认 0.0.0.0（局域网可访问）
   const lanServer = startLanServer({ port: lanPort, host: lanHost });
 
