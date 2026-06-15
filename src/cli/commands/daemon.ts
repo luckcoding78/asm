@@ -58,26 +58,14 @@ export async function daemonCommand(opts: { start?: boolean; stop?: boolean; lan
     const currentSize = statSync(EVENTS_LOG).size;
     if (currentSize <= lastOffset) return;
 
-    // 读取新增内容
-    const content = readFileSync(EVENTS_LOG, "utf-8");
-    const lines = content.split("\n").filter(Boolean);
+    // 读取完整内容，提取 lastOffset 之后的新增部分
+    const allContent = readFileSync(EVENTS_LOG, "utf-8");
+    const newContent = Buffer.from(allContent, "utf-8").subarray(lastOffset).toString("utf-8");
 
-    // 处理新行
+    // 按换行分割并去除 \r（兼容 Windows \r\n 和 Unix \n）
+    const newLines = newContent.split("\n").map(l => l.trimEnd()).filter(Boolean);
+
     let newLinesProcessed = 0;
-    const totalNewBytes = currentSize - lastOffset;
-
-    // 从末尾读取新增的行
-    const allLines = content.split("\n").filter(Boolean);
-    let offset = 0;
-    const newLines: string[] = [];
-
-    for (const line of allLines) {
-      const lineBytes = Buffer.byteLength(line + "\n", "utf-8");
-      if (offset + lineBytes > lastOffset) {
-        newLines.push(line);
-      }
-      offset += lineBytes;
-    }
 
     for (const line of newLines) {
       try {
@@ -92,7 +80,6 @@ export async function daemonCommand(opts: { start?: boolean; stop?: boolean; lan
               `${pc.bold(statusEvent.agent)} ` +
               `${statusColor(statusEvent.baseState)(statusEvent.displayText)}`
             );
-            // 推送状态更新到 LAN SSE 客户端
             broadcastStateUpdate(engine.getState());
           }
           newLinesProcessed++;
