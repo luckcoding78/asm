@@ -1,6 +1,6 @@
 {
   "name": "@aspect-spy/asm",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Agent Status Monitor — unified status monitoring for AI coding agents",
   "type": "module",
   "bin": {

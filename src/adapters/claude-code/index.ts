@@ -62,11 +62,28 @@ export class ClaudeCodeAdapter {
     // 用正斜杠的绝对路径（bash/PowerShell 都能识别）
     const hookPs1 = join(home, ".asm", "hooks", "claude-code", "asm-hook.ps1").replace(/\\/g, "/");
     const eventsLog = join(home, ".asm", "events.log").replace(/\\/g, "/");
+    const daemonPid = join(home, ".asm", "daemon.pid").replace(/\\/g, "/");
 
     if (isWindows) {
       // PowerShell 版本（用绝对路径，避免 %USERPROFILE% 展开问题）
       const psScript = `# ASM Hook Handler for Claude Code (Windows)
 param([string]$Action, [string]$Extra = "")
+
+# ── 自动启动 daemon ──
+$pidFile = "${daemonPid}"
+$daemonRunning = $false
+if (Test-Path $pidFile) {
+    $pid = Get-Content $pidFile -ErrorAction SilentlyContinue
+    if ($pid) {
+        try {
+            $null = Get-Process -Id ([int]$pid) -ErrorAction Stop
+            $daemonRunning = $true
+        } catch {}
+    }
+}
+if (-not $daemonRunning) {
+    Start-Process -FilePath "npx" -ArgumentList "@aspect-spy/asm", "daemon", "--start" -WindowStyle Hidden -ErrorAction SilentlyContinue
+}
 
 $input_json = $input | Out-String
 $timestamp = (Get-Date -Format "o")
@@ -97,6 +114,19 @@ set -euo pipefail
 
 ACTION="\${1:-unknown}"
 EXTRA="\${2:-}"
+
+# ── 自动启动 daemon ──
+PID_FILE="$HOME/.asm/daemon.pid"
+DAEMON_RUNNING=false
+if [ -f "$PID_FILE" ]; then
+    PID=$(cat "$PID_FILE" 2>/dev/null || echo "")
+    if [ -n "$PID" ] && kill -0 "$PID" 2>/dev/null; then
+        DAEMON_RUNNING=true
+    fi
+fi
+if [ "$DAEMON_RUNNING" = false ]; then
+    (npx @aspect-spy/asm daemon --start >/dev/null 2>&1 &) || true
+fi
 
 # 读取 stdin
 INPUT_JSON=$(cat)

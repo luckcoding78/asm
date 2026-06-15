@@ -19,12 +19,30 @@ export class CodexAdapter {
     mkdirSync(this.hookDir, { recursive: true });
 
     const isWindows = platform() === "win32";
+    const daemonPid = join(this.home, ".asm", "daemon.pid").replace(/\\/g, "/");
 
     if (isWindows) {
       // PowerShell hook script — 使用绝对路径避免环境变量展开问题
       const eventsLog = join(this.home, ".asm", "events.log").replace(/\\/g, "/");
       const psScript = `# ASM Hook Handler for Codex CLI (Windows)
 param([string]$Action, [string]$Extra = "")
+
+# ── 自动启动 daemon ──
+$pidFile = "${daemonPid}"
+$daemonRunning = $false
+if (Test-Path $pidFile) {
+    $pid = Get-Content $pidFile -ErrorAction SilentlyContinue
+    if ($pid) {
+        try {
+            $null = Get-Process -Id ([int]$pid) -ErrorAction Stop
+            $daemonRunning = $true
+        } catch {}
+    }
+}
+if (-not $daemonRunning) {
+    Start-Process -FilePath "npx" -ArgumentList "@aspect-spy/asm", "daemon", "--start" -WindowStyle Hidden -ErrorAction SilentlyContinue
+}
+
 $input_json = $input | Out-String
 $timestamp = (Get-Date -Format "o")
 $event_id = "$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())-$([System.Guid]::NewGuid().ToString().Substring(0,6))"
@@ -46,6 +64,20 @@ $logFile = "${eventsLog}"
 set -euo pipefail
 ACTION="\${1:-unknown}"
 EXTRA="\${2:-}"
+
+# ── 自动启动 daemon ──
+PID_FILE="$HOME/.asm/daemon.pid"
+DAEMON_RUNNING=false
+if [ -f "$PID_FILE" ]; then
+    PID=$(cat "$PID_FILE" 2>/dev/null || echo "")
+    if [ -n "$PID" ] && kill -0 "$PID" 2>/dev/null; then
+        DAEMON_RUNNING=true
+    fi
+fi
+if [ "$DAEMON_RUNNING" = false ]; then
+    (npx @aspect-spy/asm daemon --start >/dev/null 2>&1 &) || true
+fi
+
 INPUT_JSON=$(cat)
 TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
 EVENT_ID="$(date +%s)-$(head -c 4 /dev/urandom | od -An -tx1 | tr -d ' \\n' | head -c 8)"
