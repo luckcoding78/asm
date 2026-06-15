@@ -2,7 +2,7 @@
  * 跨平台桌面通知模块
  */
 
-import { exec } from "node:child_process";
+import { exec, execFile } from "node:child_process";
 import { platform } from "node:os";
 
 export interface NotifyOptions {
@@ -31,7 +31,8 @@ export async function sendNotification(opts: NotifyOptions): Promise<void> {
 function notifyMacOS(opts: NotifyOptions): Promise<void> {
   const sound = opts.sound ? `sound name "Glass"` : "";
   const script = `display notification "${escapeAppleScript(opts.body)}" with title "${escapeAppleScript(opts.title)}" ${sound}`;
-  return execPromise(`osascript -e '${script}'`);
+  // 使用 execFile 避免 shell 单引号注入问题
+  return execFilePromise("osascript", ["-e", script]);
 }
 
 function notifyWindows(opts: NotifyOptions): Promise<void> {
@@ -70,12 +71,24 @@ function notifyLinux(opts: NotifyOptions): Promise<void> {
   const urgency = urgencyMap[opts.urgency ?? "normal"];
   return execPromise(
     `notify-send -u ${urgency} -t 5000 "${escapeShell(opts.title)}" "${escapeShell(opts.body)}"`
-  );
+  ).catch((err) => {
+    // notify-send 可能未安装，静默处理
+    console.error("[Notifier] Linux 通知失败（notify-send 可能未安装）:", err.message);
+  });
 }
 
 function execPromise(cmd: string): Promise<void> {
   return new Promise((resolve, reject) => {
     exec(cmd, { timeout: 5000 }, (err) => {
+      if (err) reject(err);
+      else resolve();
+    });
+  });
+}
+
+function execFilePromise(file: string, args: string[]): Promise<void> {
+  return new Promise((resolve, reject) => {
+    execFile(file, args, { timeout: 5000 }, (err) => {
       if (err) reject(err);
       else resolve();
     });
@@ -95,5 +108,5 @@ function escapePS(str: string): string {
 }
 
 function escapeShell(str: string): string {
-  return str.replace(/"/g, '\\"');
+  return str.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\$/g, "\\$").replace(/`/g, "\\`");
 }
