@@ -57,14 +57,15 @@ export class ClaudeCodeAdapter {
     const hookDir = join(homedir(), ".asm", "hooks", "claude-code");
     mkdirSync(hookDir, { recursive: true });
 
-    // 主入口脚本（跨平台）
     const isWindows = platform() === "win32";
+    const home = homedir();
+    // 用正斜杠的绝对路径（bash/PowerShell 都能识别）
+    const hookPs1 = join(home, ".asm", "hooks", "claude-code", "asm-hook.ps1").replace(/\\/g, "/");
+    const eventsLog = join(home, ".asm", "events.log").replace(/\\/g, "/");
 
     if (isWindows) {
-      // PowerShell 版本
+      // PowerShell 版本（用绝对路径，避免 %USERPROFILE% 展开问题）
       const psScript = `# ASM Hook Handler for Claude Code (Windows)
-# 从 stdin 读取 JSON 事件数据，写入 ~/.asm/events.log
-
 param([string]$Action, [string]$Extra = "")
 
 $input_json = $input | Out-String
@@ -77,24 +78,21 @@ $event = @{
     timestamp = $timestamp
     hookAction = $Action
     extra = $Extra
-    rawData = ($input_json | ConvertFrom-Json)
+    rawData = ($input_json | ConvertFrom-Json -ErrorAction SilentlyContinue)
 } | ConvertTo-Json -Depth 10 -Compress
 
-$logFile = Join-Path $env:USERPROFILE ".asm" "events.log"
+$logFile = "${eventsLog}"
 Add-Content -Path $logFile -Value $event -Encoding UTF8
 `;
       writeFileSync(join(hookDir, "asm-hook.ps1"), psScript, "utf-8");
 
-      // BAT 包装器（用于 Claude Code hooks command 字段）
-      const batWrapper = `@echo off
-powershell -NoProfile -ExecutionPolicy Bypass -File "%USERPROFILE%\\.asm\\hooks\\claude-code\\asm-hook.ps1" %*
-`;
+      // BAT 包装器
+      const batWrapper = `@echo off\r\npowershell -NoProfile -ExecutionPolicy Bypass -File "${hookPs1}" %*\r\n`;
       writeFileSync(join(hookDir, "asm-hook.bat"), batWrapper, "utf-8");
     } else {
       // Bash 版本（macOS / Linux）
       const shScript = `#!/usr/bin/env bash
 # ASM Hook Handler for Claude Code
-# 从 stdin 读取 JSON 事件数据，写入 ~/.asm/events.log
 set -euo pipefail
 
 ACTION="\${1:-unknown}"
@@ -122,9 +120,11 @@ echo "{\\"eventId\\":\\"$EVENT_ID\\",\\"agent\\":\\"claude-code\\",\\"timestamp\
   // ── 注入 Hooks 配置 ──
   private async injectHooks(): Promise<void> {
     const isWindows = platform() === "win32";
+    // 用绝对路径 + 正斜杠（Windows 上 bash/PowerShell 都能识别）
+    const hookScript = join(homedir(), ".asm", "hooks", "claude-code", "asm-hook.ps1").replace(/\\/g, "/");
     const hookCmd = isWindows
-      ? 'powershell -NoProfile -ExecutionPolicy Bypass -File "%USERPROFILE%\\\\.asm\\\\hooks\\\\claude-code\\\\asm-hook.ps1"'
-      : '"$HOME/.asm/hooks/claude-code/asm-hook.sh"';
+      ? `powershell -NoProfile -ExecutionPolicy Bypass -File "${hookScript}"`
+      : `"${join(homedir(), ".asm", "hooks", "claude-code", "asm-hook.sh")}"`;
 
     const asmHooks = {
       SessionStart: [{
