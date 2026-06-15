@@ -66,12 +66,14 @@ const ADAPTERS: AdapterMeta[] = [
 
 // ── Agent 检测函数 ──
 
+const isWindows = platform() === "win32";
+const NULL_STDERR = isWindows ? "2>nul" : "2>/dev/null";
+
 function detectClaudeCode(): boolean {
   try {
-    execSync("claude --version", { stdio: "ignore" });
+    execSync(`claude --version ${NULL_STDERR}`, { stdio: "ignore" });
     return true;
   } catch {
-    // 也检查常见安装路径
     const home = homedir();
     return existsSync(join(home, ".claude")) ||
            existsSync(join(home, ".claude", "settings.json"));
@@ -80,7 +82,7 @@ function detectClaudeCode(): boolean {
 
 function detectCodex(): boolean {
   try {
-    execSync("codex --version", { stdio: "ignore" });
+    execSync(`codex --version ${NULL_STDERR}`, { stdio: "ignore" });
     return true;
   } catch {
     return false;
@@ -88,9 +90,11 @@ function detectCodex(): boolean {
 }
 
 function detectCopilot(): boolean {
-  // 检测 VS Code 中是否安装了 Copilot 扩展
   try {
-    const result = execSync("code --list-extensions 2>/dev/null", { encoding: "utf-8" });
+    const result = execSync(`code --list-extensions ${NULL_STDERR}`, {
+      encoding: "utf-8",
+      stdio: ["ignore", "pipe", "ignore"],
+    });
     return result.toLowerCase().includes("copilot");
   } catch {
     return false;
