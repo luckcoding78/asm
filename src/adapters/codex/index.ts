@@ -48,7 +48,7 @@ ACTION="\${1:-unknown}"
 EXTRA="\${2:-}"
 INPUT_JSON=$(cat)
 TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
-EVENT_ID="$(date +%s)-$(head -c 4 /dev/urandom | od -An -tx1 | head -c 8 | tr -d ' ')"
+EVENT_ID="$(date +%s)-$(head -c 4 /dev/urandom | od -An -tx1 | tr -d ' \\n' | head -c 8)"
 echo "{\\"eventId\\":\\"$EVENT_ID\\",\\"agent\\":\\"codex\\",\\"timestamp\\":\\"$TIMESTAMP\\",\\"hookAction\\":\\"$ACTION\\",\\"extra\\":\\"$EXTRA\\",\\"rawData\\":$INPUT_JSON}" >> "$HOME/.asm/events.log"
 `;
       writeFileSync(join(this.hookDir, "asm-hook.sh"), shScript, "utf-8");

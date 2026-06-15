@@ -205,12 +205,21 @@ export function broadcastStateUpdate(state: GlobalState): void {
 export function startLanServer(opts: LanServerOptions): Server {
   const server = createServer(handleRequest);
 
-  server.listen(opts.port, opts.host || "0.0.0.0", () => {
+  const bindHost = opts.host || "0.0.0.0";
+  server.listen(opts.port, bindHost, () => {
     const lanIPs = getLanIPs();
     console.log();
 
-    if (lanIPs.length > 0) {
-      console.log(`  📡 LAN 数据服务已启动:`);
+    if (bindHost === "0.0.0.0" && lanIPs.length > 0) {
+      console.log(`  📡 LAN 数据服务已启动 (所有网络接口):`);
+      for (const ip of lanIPs) {
+        console.log(`     http://${ip}:${opts.port}`);
+      }
+      console.log();
+      console.log(`  ⚠ 服务对所有网络接口可见。如在公共网络，请使用:`);
+      console.log(`    asm daemon --lan-host 127.0.0.1  (仅本机)`);
+    } else if (lanIPs.length > 0) {
+      console.log(`  📡 LAN 数据服务已启动 (${bindHost}):`);
       for (const ip of lanIPs) {
         console.log(`     http://${ip}:${opts.port}`);
       }

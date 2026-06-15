@@ -20,7 +20,7 @@ import { startLanServer, broadcastStateUpdate, stopLanServer } from "../../lan-s
 
 const PID_FILE = join(ASM_DIR, "daemon.pid");
 
-export async function daemonCommand(opts: { start?: boolean; stop?: boolean; lanPort?: number }) {
+export async function daemonCommand(opts: { start?: boolean; stop?: boolean; lanPort?: number; lanHost?: string }) {
   if (opts.stop) {
     return stopDaemon();
   }
@@ -45,7 +45,8 @@ export async function daemonCommand(opts: { start?: boolean; stop?: boolean; lan
 
   // 启动 LAN 服务
   const lanPort = opts.lanPort || 19527;
-  const lanServer = startLanServer({ port: lanPort });
+  const lanHost = opts.lanHost;  // undefined → 默认 0.0.0.0（局域网可访问）
+  const lanServer = startLanServer({ port: lanPort, host: lanHost });
 
   // 启动文件监听循环
   console.log(pc.green("  ✔ Daemon 已启动") + pc.dim(` (PID: ${process.pid})`));

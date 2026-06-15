@@ -101,9 +101,9 @@ EXTRA="\${2:-}"
 # 读取 stdin
 INPUT_JSON=$(cat)
 
-# 生成事件
+# 生成事件（macOS 兼容：不依赖 %3N 或 xxd）
 TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
-EVENT_ID="$(date +%s%3N 2>/dev/null || date +%s)-$(head -c 6 /dev/urandom | xxd -p 2>/dev/null | head -c 6 || echo $RANDOM)"
+EVENT_ID="$(date +%s)-$(head -c 6 /dev/urandom | od -An -tx1 | tr -d ' \\n' | head -c 12)"
 
 # 写入事件日志（JSON Lines 格式）
 echo "{\\"eventId\\":\\"$EVENT_ID\\",\\"agent\\":\\"claude-code\\",\\"timestamp\\":\\"$TIMESTAMP\\",\\"hookAction\\":\\"$ACTION\\",\\"extra\\":\\"$EXTRA\\",\\"rawData\\":$INPUT_JSON}" >> "$HOME/.asm/events.log"
@@ -301,7 +301,7 @@ ACTION="\${1:-unknown}"
 EXTRA="\${2:-}"
 INPUT_JSON=$(cat)
 TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
-EVENT_ID="$(date +%s)-$(head -c 4 /dev/urandom | od -An -tx1 | head -c 8 | tr -d ' ')"
+EVENT_ID="$(date +%s)-$(head -c 4 /dev/urandom | od -An -tx1 | tr -d ' \\n' | head -c 8)"
 echo "{\\"eventId\\":\\"$EVENT_ID\\",\\"agent\\":\\"claude-code\\",\\"timestamp\\":\\"$TIMESTAMP\\",\\"hookAction\\":\\"$ACTION\\",\\"extra\\":\\"$EXTRA\\",\\"rawData\\":$INPUT_JSON}" >> "$HOME/.asm/events.log"
 `;
       writeFileSync(join(pluginDir, "scripts", "hook-handler.sh"), shHandler, "utf-8");

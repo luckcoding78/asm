@@ -41,6 +41,7 @@ const HELP = `
     asm status               查看实时状态
     asm daemon --start       启动守护进程
     asm daemon --lan-port 8080  指定 LAN 服务端口
+    asm daemon --lan-host 127.0.0.1  仅本机访问（不暴露局域网）
 `;
 
 async function main() {
@@ -55,6 +56,7 @@ async function main() {
       get: { type: "string" },
       set: { type: "string" },
       "lan-port": { type: "string" },
+      "lan-host": { type: "string" },
     },
   });
 
@@ -81,7 +83,7 @@ async function main() {
       await statusCommand();
       break;
     case "daemon":
-      await daemonCommand({ start: values.start, stop: values.stop, lanPort: values["lan-port"] ? Number(values["lan-port"]) : undefined });
+      await daemonCommand({ start: values.start, stop: values.stop, lanPort: values["lan-port"] ? Number(values["lan-port"]) : undefined, lanHost: values["lan-host"] });
       break;
     case "config":
       await configCommand({ get: values.get, set: values.set });

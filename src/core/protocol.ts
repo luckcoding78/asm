@@ -6,6 +6,9 @@
  * 不需要关心数据来自哪个适配器。
  */
 
+import { homedir } from "node:os";
+import { join } from "node:path";
+
 // ── 基础状态 ──
 export type BaseState =
   | "idle"       // Agent 空闲，等待输入
@@ -152,13 +155,12 @@ export interface NotificationTrigger {
 // ── 常量 ──
 export const PROTOCOL_VERSION = "1.0.0";
 export const ASM_DIR = process.env.ASM_DIR || getDefaultAsmDir();
-export const STATUS_FILE = `${ASM_DIR}/status.json`;
-export const CONFIG_FILE = `${ASM_DIR}/config.json`;
-export const EVENTS_LOG = `${ASM_DIR}/events.log`;
+export const STATUS_FILE = join(ASM_DIR, "status.json");
+export const CONFIG_FILE = join(ASM_DIR, "config.json");
+export const EVENTS_LOG = join(ASM_DIR, "events.log");
 
 function getDefaultAsmDir(): string {
-  const home = process.env.HOME || process.env.USERPROFILE || "~";
-  return `${home}/.asm`;
+  return join(homedir(), ".asm");
 }
 
 // ── 默认配置 ──
