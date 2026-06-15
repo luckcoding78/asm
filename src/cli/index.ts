@@ -42,6 +42,7 @@ const HELP = `
     asm daemon --start       启动守护进程
     asm daemon --lan-port 8080  指定 LAN 服务端口
     asm daemon --lan-host 127.0.0.1  仅本机访问（不暴露局域网）
+    asm daemon --quiet       静默模式（无控制台输出）
 `;
 
 async function main() {
@@ -57,6 +58,7 @@ async function main() {
       set: { type: "string" },
       "lan-port": { type: "string" },
       "lan-host": { type: "string" },
+      quiet: { type: "boolean" },
     },
   });
 
@@ -83,7 +85,7 @@ async function main() {
       await statusCommand();
       break;
     case "daemon":
-      await daemonCommand({ start: values.start, stop: values.stop, lanPort: values["lan-port"] ? Number(values["lan-port"]) : undefined, lanHost: values["lan-host"] });
+      await daemonCommand({ start: values.start, stop: values.stop, lanPort: values["lan-port"] ? Number(values["lan-port"]) : undefined, lanHost: values["lan-host"], quiet: values.quiet });
       break;
     case "config":
       await configCommand({ get: values.get, set: values.set });

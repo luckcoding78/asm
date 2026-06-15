@@ -20,17 +20,20 @@ import { startLanServer, broadcastStateUpdate, stopLanServer } from "../../lan-s
 
 const PID_FILE = join(ASM_DIR, "daemon.pid");
 
-export async function daemonCommand(opts: { start?: boolean; stop?: boolean; lanPort?: number; lanHost?: string }) {
+export async function daemonCommand(opts: { start?: boolean; stop?: boolean; lanPort?: number; lanHost?: string; quiet?: boolean }) {
   if (opts.stop) {
     return stopDaemon();
   }
 
+  const quiet = opts.quiet ?? false;
+  const log = quiet ? () => {} : console.log.bind(console);
+
   // 默认行为：前台运行
-  console.log();
-  console.log(pc.bold("  ASM Daemon") + pc.dim(" — 状态聚合守护进程"));
-  console.log(pc.dim("  监听 events.log，实时更新 Agent 状态。"));
-  console.log(pc.dim("  按 Ctrl+C 停止。"));
-  console.log();
+  log();
+  log(pc.bold("  ASM Daemon") + pc.dim(" — 状态聚合守护进程"));
+  log(pc.dim("  监听 events.log，实时更新 Agent 状态。"));
+  log(pc.dim("  按 Ctrl+C 停止。"));
+  log();
 
   const engine = new StatusEngine();
 
@@ -46,10 +49,10 @@ export async function daemonCommand(opts: { start?: boolean; stop?: boolean; lan
   // 启动 LAN 服务
   const lanPort = opts.lanPort || 39527;
   const lanHost = opts.lanHost;  // undefined → 默认 0.0.0.0（局域网可访问）
-  const lanServer = startLanServer({ port: lanPort, host: lanHost });
+  const lanServer = startLanServer({ port: lanPort, host: lanHost, quiet });
 
   // 启动文件监听循环
-  console.log(pc.green("  ✔ Daemon 已启动") + pc.dim(` (PID: ${process.pid})`));
+  log(pc.green("  ✔ Daemon 已启动") + pc.dim(` (PID: ${process.pid})`));
 
   const pollInterval = 1000; // 每秒检查一次
 
@@ -76,7 +79,7 @@ export async function daemonCommand(opts: { start?: boolean; stop?: boolean; lan
           const result = engine.processEvent(statusEvent);
           if (result.updated) {
             const icon = result.shouldNotify ? "🔔" : "  ";
-            console.log(
+            log(
               `  ${icon} ${pc.dim(statusEvent.timestamp.slice(11, 19))} ` +
               `${pc.bold(statusEvent.agent)} ` +
               `${statusColor(statusEvent.baseState)(statusEvent.displayText)}`
@@ -103,7 +106,7 @@ export async function daemonCommand(opts: { start?: boolean; stop?: boolean; lan
     try {
       unlinkSync(PID_FILE);
     } catch { /* ignore */ }
-    console.log(pc.dim("\n  Daemon 已停止。"));
+    log(pc.dim("\n  Daemon 已停止。"));
     process.exit(0);
   };
 

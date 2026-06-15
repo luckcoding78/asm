@@ -20,6 +20,7 @@ import { STATUS_FILE, type GlobalState, type AgentSnapshot } from "./core/protoc
 interface LanServerOptions {
   port: number;
   host?: string;
+  quiet?: boolean;
 }
 
 // ── SSE 客户端管理 ──
@@ -204,41 +205,46 @@ export function broadcastStateUpdate(state: GlobalState): void {
 // ── 启动 LAN 服务 ──
 export function startLanServer(opts: LanServerOptions): Server {
   const server = createServer(handleRequest);
+  const log = opts.quiet ? () => {} : console.log.bind(console);
 
   const bindHost = opts.host || "0.0.0.0";
   server.listen(opts.port, bindHost, () => {
     const lanIPs = getLanIPs();
-    console.log();
+    log();
 
     if (bindHost === "0.0.0.0" && lanIPs.length > 0) {
-      console.log(`  📡 LAN 数据服务已启动 (所有网络接口):`);
+      log(`  📡 LAN 数据服务已启动 (所有网络接口):`);
       for (const ip of lanIPs) {
-        console.log(`     http://${ip}:${opts.port}`);
+        log(`     http://${ip}:${opts.port}`);
       }
-      console.log();
-      console.log(`  ⚠ 服务对所有网络接口可见。如在公共网络，请使用:`);
-      console.log(`    asm daemon --lan-host 127.0.0.1  (仅本机)`);
+      log();
+      log(`  ⚠ 服务对所有网络接口可见。如在公共网络，请使用:`);
+      log(`    asm daemon --lan-host 127.0.0.1  (仅本机)`);
     } else if (lanIPs.length > 0) {
-      console.log(`  📡 LAN 数据服务已启动 (${bindHost}):`);
+      log(`  📡 LAN 数据服务已启动 (${bindHost}):`);
       for (const ip of lanIPs) {
-        console.log(`     http://${ip}:${opts.port}`);
+        log(`     http://${ip}:${opts.port}`);
       }
     } else {
-      console.log(`  📡 LAN 数据服务已启动: http://localhost:${opts.port}`);
+      log(`  📡 LAN 数据服务已启动: http://localhost:${opts.port}`);
     }
 
-    console.log();
-    console.log(`  📱 APP 连接 /api/stream 获取实时推送`);
-    console.log(`  📋 数据接口: /api/status | /api/agents`);
-    console.log();
+    log();
+    log(`  📱 APP 连接 /api/stream 获取实时推送`);
+    log(`  📋 数据接口: /api/status | /api/agents`);
+    log();
   });
 
   server.on("error", (err: NodeJS.ErrnoException) => {
     if (err.code === "EADDRINUSE") {
-      console.error(`  ⚠ 端口 ${opts.port} 已被占用，LAN 服务未启动`);
-      console.error(`    请尝试: asm daemon --lan-port ${opts.port + 1}`);
+      if (!opts.quiet) {
+        console.error(`  ⚠ 端口 ${opts.port} 已被占用，LAN 服务未启动`);
+        console.error(`    请尝试: asm daemon --lan-port ${opts.port + 1}`);
+      }
     } else {
-      console.error(`  ⚠ LAN 服务启动失败:`, err.message);
+      if (!opts.quiet) {
+        console.error(`  ⚠ LAN 服务启动失败:`, err.message);
+      }
     }
   });
 

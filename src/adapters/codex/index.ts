@@ -133,7 +133,7 @@ if (existsSync(pidFile)) {
   } catch {}
 }
 
-const child = spawn(process.execPath, ["${asmEntry}", "daemon", "--start"], {
+const child = spawn(process.execPath, ["${asmEntry}", "daemon", "--start", "--quiet"], {
   detached: true,
   stdio: "ignore",
   windowsHide: true,

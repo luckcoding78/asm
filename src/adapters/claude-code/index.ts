@@ -154,7 +154,7 @@ if (existsSync(pidFile)) {
 }
 
 // 静默启动 daemon（detached + windowsHide，无弹窗）
-const child = spawn(process.execPath, ["${asmEntry}", "daemon", "--start"], {
+const child = spawn(process.execPath, ["${asmEntry}", "daemon", "--start", "--quiet"], {
   detached: true,
   stdio: "ignore",
   windowsHide: true,
