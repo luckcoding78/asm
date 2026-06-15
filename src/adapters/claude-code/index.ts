@@ -82,7 +82,7 @@ $event = @{
 } | ConvertTo-Json -Depth 10 -Compress
 
 $logFile = "${eventsLog}"
-Add-Content -Path $logFile -Value $event -Encoding UTF8
+[System.IO.File]::AppendAllText($logFile, $event + [Environment]::NewLine, [System.Text.UTF8Encoding]::new($false))
 `;
       writeFileSync(join(hookDir, "asm-hook.ps1"), psScript, "utf-8");
 

@@ -21,7 +21,8 @@ export class CodexAdapter {
     const isWindows = platform() === "win32";
 
     if (isWindows) {
-      // PowerShell hook script
+      // PowerShell hook script — 使用绝对路径避免环境变量展开问题
+      const eventsLog = join(this.home, ".asm", "events.log").replace(/\\/g, "/");
       const psScript = `# ASM Hook Handler for Codex CLI (Windows)
 param([string]$Action, [string]$Extra = "")
 $input_json = $input | Out-String
@@ -33,10 +34,10 @@ $event = @{
     timestamp = $timestamp
     hookAction = $Action
     extra = $Extra
-    rawData = ($input_json | ConvertFrom-Json)
+    rawData = ($input_json | ConvertFrom-Json -ErrorAction SilentlyContinue)
 } | ConvertTo-Json -Depth 10 -Compress
-$logFile = Join-Path $env:USERPROFILE ".asm" "events.log"
-Add-Content -Path $logFile -Value $event -Encoding UTF8
+$logFile = "${eventsLog}"
+[System.IO.File]::AppendAllText($logFile, $event + [Environment]::NewLine, [System.Text.UTF8Encoding]::new($false))
 `;
       writeFileSync(join(this.hookDir, "asm-hook.ps1"), psScript, "utf-8");
     } else {
@@ -89,8 +90,9 @@ echo "{\\"eventId\\":\\"$EVENT_ID\\",\\"agent\\":\\"codex\\",\\"timestamp\\":\\"
   private getHookCmd(action: string): string {
     const isWindows = platform() === "win32";
     if (isWindows) {
-      return `powershell -NoProfile -ExecutionPolicy Bypass -File "%USERPROFILE%\\\\.asm\\\\hooks\\\\codex\\\\asm-hook.ps1" ${action}`;
+      const hookScript = join(this.home, ".asm", "hooks", "codex", "asm-hook.ps1").replace(/\\/g, "/");
+      return `powershell -NoProfile -ExecutionPolicy Bypass -File "${hookScript}" ${action}`;
     }
-    return `"$HOME/.asm/hooks/codex/asm-hook.sh" ${action}`;
+    return `"${join(this.home, ".asm", "hooks", "codex", "asm-hook.sh")}" ${action}`;
   }
 }
