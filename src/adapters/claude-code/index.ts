@@ -216,11 +216,15 @@ echo "{\\"eventId\\":\\"$EVENT_ID\\",\\"agent\\":\\"claude-code\\",\\"timestamp\
 
   // ── 生成 Plugin 文件（备用安装方式） ──
   private async generatePluginFiles(): Promise<void> {
-    const pluginDir = join(homedir(), ".asm", "adapters", "claude-code", "plugin");
+    const home = homedir();
+    const isWindows = platform() === "win32";
+    const pluginDir = join(home, ".asm", "adapters", "claude-code", "plugin");
     mkdirSync(join(pluginDir, ".claude-plugin"), { recursive: true });
     mkdirSync(join(pluginDir, "hooks"), { recursive: true });
     mkdirSync(join(pluginDir, "scripts"), { recursive: true });
     mkdirSync(join(pluginDir, "skills", "asm-status"), { recursive: true });
+
+    const eventsLog = join(home, ".asm", "events.log").replace(/\\/g, "/");
 
     // plugin.json
     writeFileSync(
@@ -237,34 +241,61 @@ echo "{\\"eventId\\":\\"$EVENT_ID\\",\\"agent\\":\\"claude-code\\",\\"timestamp\
       "utf-8"
     );
 
-    // hooks/hooks.json（引用 ${CLAUDE_PLUGIN_ROOT} 下的脚本）
+    // 根据平台选择 hook 命令格式
+    const hookScript = isWindows
+      ? join(pluginDir, "scripts", "hook-handler.ps1").replace(/\\/g, "/")
+      : join(pluginDir, "scripts", "hook-handler.sh");
+    const hookCmd = isWindows
+      ? `powershell -NoProfile -ExecutionPolicy Bypass -File "${hookScript}"`
+      : `"${hookScript}"`;
+
+    // hooks/hooks.json
     writeFileSync(
       join(pluginDir, "hooks", "hooks.json"),
       JSON.stringify({
         hooks: {
-          SessionStart: [{ hooks: [{ type: "command", command: "${CLAUDE_PLUGIN_ROOT}/scripts/hook-handler.sh session-start" }] }],
-          UserPromptSubmit: [{ hooks: [{ type: "command", command: "${CLAUDE_PLUGIN_ROOT}/scripts/hook-handler.sh prompt-submit" }] }],
+          SessionStart: [{ hooks: [{ type: "command", command: `${hookCmd} session-start` }] }],
+          UserPromptSubmit: [{ hooks: [{ type: "command", command: `${hookCmd} prompt-submit` }] }],
           PreToolUse: [
-            { matcher: "Edit|Write", hooks: [{ type: "command", command: "${CLAUDE_PLUGIN_ROOT}/scripts/hook-handler.sh tool-use editing" }] },
-            { matcher: "Bash", hooks: [{ type: "command", command: "${CLAUDE_PLUGIN_ROOT}/scripts/hook-handler.sh tool-use bash-infer" }] },
-            { matcher: "Grep|Glob|Read", hooks: [{ type: "command", command: "${CLAUDE_PLUGIN_ROOT}/scripts/hook-handler.sh tool-use searching" }] },
-            { matcher: "*", hooks: [{ type: "command", command: "${CLAUDE_PLUGIN_ROOT}/scripts/hook-handler.sh tool-use generic" }] },
+            { matcher: "Edit|Write", hooks: [{ type: "command", command: `${hookCmd} tool-use editing` }] },
+            { matcher: "Bash", hooks: [{ type: "command", command: `${hookCmd} tool-use bash-infer` }] },
+            { matcher: "Grep|Glob|Read", hooks: [{ type: "command", command: `${hookCmd} tool-use searching` }] },
+            { matcher: "*", hooks: [{ type: "command", command: `${hookCmd} tool-use generic` }] },
           ],
-          PermissionRequest: [{ hooks: [{ type: "command", command: "${CLAUDE_PLUGIN_ROOT}/scripts/hook-handler.sh permission-request" }] }],
-          Stop: [{ hooks: [{ type: "command", command: "${CLAUDE_PLUGIN_ROOT}/scripts/hook-handler.sh stop" }] }],
-          Notification: [{ hooks: [{ type: "command", command: "${CLAUDE_PLUGIN_ROOT}/scripts/hook-handler.sh notification" }] }],
-          SubagentStart: [{ hooks: [{ type: "command", command: "${CLAUDE_PLUGIN_ROOT}/scripts/hook-handler.sh subagent-start" }] }],
-          SubagentStop: [{ hooks: [{ type: "command", command: "${CLAUDE_PLUGIN_ROOT}/scripts/hook-handler.sh subagent-stop" }] }],
-          TaskCreated: [{ hooks: [{ type: "command", command: "${CLAUDE_PLUGIN_ROOT}/scripts/hook-handler.sh task-created" }] }],
-          TaskCompleted: [{ hooks: [{ type: "command", command: "${CLAUDE_PLUGIN_ROOT}/scripts/hook-handler.sh task-completed" }] }],
+          PermissionRequest: [{ hooks: [{ type: "command", command: `${hookCmd} permission-request` }] }],
+          Stop: [{ hooks: [{ type: "command", command: `${hookCmd} stop` }] }],
+          Notification: [{ hooks: [{ type: "command", command: `${hookCmd} notification` }] }],
+          SubagentStart: [{ hooks: [{ type: "command", command: `${hookCmd} subagent-start` }] }],
+          SubagentStop: [{ hooks: [{ type: "command", command: `${hookCmd} subagent-stop` }] }],
+          TaskCreated: [{ hooks: [{ type: "command", command: `${hookCmd} task-created` }] }],
+          TaskCompleted: [{ hooks: [{ type: "command", command: `${hookCmd} task-completed` }] }],
         },
       }, null, 2),
       "utf-8"
     );
 
-    // scripts/hook-handler.sh
-    const handlerScript = `#!/usr/bin/env bash
-# ASM Hook Handler — Claude Code Plugin 版本
+    if (isWindows) {
+      // PowerShell hook handler for Windows
+      const psHandler = `# ASM Hook Handler — Claude Code Plugin (Windows)
+param([string]$Action, [string]$Extra = "")
+$input_json = $input | Out-String
+$timestamp = (Get-Date -Format "o")
+$event_id = "$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())-$([System.Guid]::NewGuid().ToString().Substring(0,6))"
+$event = @{
+    eventId = $event_id
+    agent = "claude-code"
+    timestamp = $timestamp
+    hookAction = $Action
+    extra = $Extra
+    rawData = ($input_json | ConvertFrom-Json -ErrorAction SilentlyContinue)
+} | ConvertTo-Json -Depth 10 -Compress
+[System.IO.File]::AppendAllText("${eventsLog}", $event + [Environment]::NewLine, [System.Text.UTF8Encoding]::new($false))
+`;
+      writeFileSync(join(pluginDir, "scripts", "hook-handler.ps1"), psHandler, "utf-8");
+    } else {
+      // Bash hook handler for macOS/Linux
+      const shHandler = `#!/usr/bin/env bash
+# ASM Hook Handler — Claude Code Plugin
 set -euo pipefail
 ACTION="\${1:-unknown}"
 EXTRA="\${2:-}"
@@ -273,7 +304,11 @@ TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
 EVENT_ID="$(date +%s)-$(head -c 4 /dev/urandom | od -An -tx1 | head -c 8 | tr -d ' ')"
 echo "{\\"eventId\\":\\"$EVENT_ID\\",\\"agent\\":\\"claude-code\\",\\"timestamp\\":\\"$TIMESTAMP\\",\\"hookAction\\":\\"$ACTION\\",\\"extra\\":\\"$EXTRA\\",\\"rawData\\":$INPUT_JSON}" >> "$HOME/.asm/events.log"
 `;
-    writeFileSync(join(pluginDir, "scripts", "hook-handler.sh"), handlerScript, "utf-8");
+      writeFileSync(join(pluginDir, "scripts", "hook-handler.sh"), shHandler, "utf-8");
+      try {
+        execSync(`chmod +x "${join(pluginDir, "scripts", "hook-handler.sh")}"`, { stdio: "ignore" });
+      } catch { /* ignore */ }
+    }
 
     // skills/asm-status/SKILL.md
     writeFileSync(
