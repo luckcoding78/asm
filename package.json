@@ -1,10 +1,10 @@
 {
   "name": "@aspect-spy/asm",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Agent Status Monitor — unified status monitoring for AI coding agents",
   "type": "module",
   "bin": {
-    "asm": "./dist/cli/index.js"
+    "asm": "dist/cli/index.js"
   },
   "files": [
     "dist/"
