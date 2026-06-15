@@ -30,12 +30,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/aspect-spy/asm.git"
+    "url": "https://github.com/luckcoding78/asm.git"
   },
   "bugs": {
-    "url": "https://github.com/aspect-spy/asm/issues"
+    "url": "https://github.com/luckcoding78/asm/issues"
   },
-  "homepage": "https://github.com/aspect-spy/asm#readme",
+  "homepage": "https://github.com/luckcoding78/asm#readme",
   "engines": {
     "node": ">=18"
   },

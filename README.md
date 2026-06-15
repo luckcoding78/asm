@@ -156,7 +156,7 @@ Claude Code 运行时，Hooks 自动将事件写入 `~/.asm/events.log`，由 `a
 ## 开发
 
 ```bash
-git clone https://github.com/aspect-spy/asm.git
+git clone https://github.com/luckcoding78/asm.git
 cd asm
 npm install
 npm run dev -- install    # 开发模式运行 install 命令
