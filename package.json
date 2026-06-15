@@ -1,0 +1,52 @@
+{
+  "name": "@aspect-spy/asm",
+  "version": "0.1.0",
+  "description": "Agent Status Monitor — unified status monitoring for AI coding agents",
+  "type": "module",
+  "bin": {
+    "asm": "./dist/cli/index.js"
+  },
+  "files": [
+    "dist/"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/cli/index.ts",
+    "start": "node dist/cli/index.js",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "ai-agent",
+    "status-monitor",
+    "claude-code",
+    "codex",
+    "copilot",
+    "cursor",
+    "agent-status",
+    "monitoring",
+    "developer-tools"
+  ],
+  "author": "",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/aspect-spy/asm.git"
+  },
+  "bugs": {
+    "url": "https://github.com/aspect-spy/asm/issues"
+  },
+  "homepage": "https://github.com/aspect-spy/asm#readme",
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "prompts": "^2.4.2",
+    "picocolors": "^1.1.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/prompts": "^2.4.9",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}
