@@ -3,7 +3,7 @@
  * 启动后台状态聚合守护进程，持续读取 events.log 并推送到 Status Engine
  */
 
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readFileSync, statSync, unlinkSync } from "node:fs";
 import { createReadStream } from "node:fs";
 import { createInterface } from "node:readline";
 import { writeFileSync, appendFileSync } from "node:fs";
@@ -113,7 +113,6 @@ export async function daemonCommand(opts: { start?: boolean; stop?: boolean; lan
     clearInterval(timer);
     stopLanServer(lanServer);
     try {
-      const { unlinkSync } = require("node:fs");
       unlinkSync(PID_FILE);
     } catch { /* ignore */ }
     console.log(pc.dim("\n  Daemon 已停止。"));
@@ -291,7 +290,6 @@ function stopDaemon() {
   const pid = readFileSync(PID_FILE, "utf-8").trim();
   try {
     process.kill(Number(pid), "SIGTERM");
-    const { unlinkSync } = require("node:fs");
     unlinkSync(PID_FILE);
     console.log(pc.green(`  ✔ Daemon 已停止 (PID: ${pid})`));
   } catch {
