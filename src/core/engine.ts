@@ -116,17 +116,34 @@ export class StatusEngine {
     return Object.values(this.state.agents).filter(s => s.agent === agentType);
   }
 
-  // ── 清理过期会话（超过 30 分钟无更新标记为 offline） ──
+  // ── 清理过期会话 ──
+  // offline 超过 5 分钟 → 彻底移除
+  // completed 超过 10 分钟 → 彻底移除
+  // 超过 30 分钟无更新 → 标记 offline
   cleanup(staleThresholdMs: number = 30 * 60 * 1000): void {
     const now = Date.now();
+
+    // 先移除已过期会话
+    const keysToRemove: string[] = [];
     for (const [key, snapshot] of Object.entries(this.state.agents)) {
       const lastUpdate = new Date(snapshot.lastUpdated).getTime();
-      if (now - lastUpdate > staleThresholdMs && snapshot.baseState !== "offline") {
+      const age = now - lastUpdate;
+
+      if (snapshot.baseState === "offline" && age > 5 * 60 * 1000) {
+        keysToRemove.push(key);
+      } else if (snapshot.baseState === "completed" && age > 10 * 60 * 1000) {
+        keysToRemove.push(key);
+      } else if (age > staleThresholdMs && snapshot.baseState !== "offline") {
         snapshot.baseState = "offline";
         snapshot.displayText = "离线（超时）";
         snapshot.lastUpdated = nowISO();
       }
     }
+
+    for (const key of keysToRemove) {
+      delete this.state.agents[key];
+    }
+
     this.saveState();
   }
 

@@ -70,26 +70,56 @@ export class ClaudeCodeAdapter {
 
     if (isWindows) {
       const psScript = `# ASM Hook Handler for Claude Code (Windows)
-param([string]$Action, [string]$Extra = "")
+# Ultra-fast: never blocks Claude Code
+param([string]\$Action, [string]\$Extra = "")
 
-# ── 自动启动 daemon（静默，无弹窗）──
-node "${ensureDaemon}"
+try {
+    # ── Auto-start daemon only on first hook (SessionStart) ──
+    if (\$Action -eq "session-start") {
+        \$pidFile = "${daemonPid}"
+        \$needStart = \$true
+        if (Test-Path \$pidFile) {
+            try {
+                \$pid = [int](Get-Content \$pidFile -Raw).Trim()
+                \$proc = Get-Process -Id \$pid -ErrorAction Stop
+                \$needStart = \$false
+            } catch {}
+        }
+        if (\$needStart) {
+            Start-Process node -ArgumentList "${ensureDaemon}" -WindowStyle Hidden -ErrorAction SilentlyContinue
+        }
+    }
 
-$input_json = $input | Out-String
-$timestamp = (Get-Date -Format "o")
-$event_id = "$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())-$([System.Guid]::NewGuid().ToString().Substring(0,6))"
+    # ── Non-blocking stdin read (max 300ms) ──
+    \$input_json = "{}"
+    try {
+        \$stdin = [Console]::In
+        if (\$stdin.Peek() -ge 0) {
+            \$sb = New-Object System.Text.StringBuilder
+            \$deadline = (Get-Date).AddMilliseconds(300)
+            while ((Get-Date) -lt \$deadline) {
+                if (\$stdin.Peek() -ge 0) {
+                    [void]\$sb.Append([char]\$stdin.Read())
+                } else {
+                    break
+                }
+            }
+            \$raw = \$sb.ToString().Trim()
+            if (\$raw.Length -gt 0) { \$input_json = \$raw }
+        }
+    } catch {}
 
-$event = @{
-    eventId = $event_id
-    agent = "claude-code"
-    timestamp = $timestamp
-    hookAction = $Action
-    extra = $Extra
-    rawData = ($input_json | ConvertFrom-Json -ErrorAction SilentlyContinue)
-} | ConvertTo-Json -Depth 10 -Compress
+    # ── Build and write event ──
+    \$timestamp = (Get-Date -Format "o")
+    \$ticks = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
+    \$guid = [System.Guid]::NewGuid().ToString().Substring(0,6)
 
-$logFile = "${eventsLog}"
-[System.IO.File]::AppendAllText($logFile, $event + [Environment]::NewLine, [System.Text.UTF8Encoding]::new($false))
+    \$logLine = "{\`"eventId\`":\`"\${ticks}-\${guid}\`",\`"agent\`":\`"claude-code\`",\`"timestamp\`":\`"\${timestamp}\`",\`"hookAction\`":\`"\${Action}\`",\`"extra\`":\`"\${Extra}\`",\`"rawData\`":\${input_json}}"
+
+    [System.IO.File]::AppendAllText("${eventsLog}", \$logLine + "\`n", [System.Text.UTF8Encoding]::new(\$false))
+} catch {
+    # Never block Claude Code
+}
 `;
       writeFileSync(join(hookDir, "asm-hook.ps1"), psScript, "utf-8");
 
